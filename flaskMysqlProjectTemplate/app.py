@@ -1,13 +1,11 @@
-import sqlparse
+import sqlparse, re
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_mysqldb import MySQL
 from MySQLConfig import MySQLConfig
-import re
 
 app = Flask(__name__)
-
 app.secret_key = 'CSIT355MOEGMH'
-# Testing GitFile Update
+
 # Configure MySQL using the imported config
 app.config['MYSQL_HOST'] = MySQLConfig.HOST
 app.config['MYSQL_USER'] = MySQLConfig.USER
@@ -16,6 +14,7 @@ app.config['MYSQL_DB'] = MySQLConfig.DATABASE
 
 # Create a MySQL connection
 mysql = MySQL(app)
+
 
 def execute_initial_sql(mysql):
     try:
@@ -32,6 +31,7 @@ def execute_initial_sql(mysql):
     except Exception as e:
         print(f"Error executing initial SQL script: {str(e)}")
 
+
 # you can comment out the following two lines if using docker compose
 with app.app_context():
     execute_initial_sql(mysql)
@@ -43,10 +43,11 @@ with app.app_context():
 #     execute_initial_sql()
 #     pass
 
+# Login Page
 @app.route('/', methods=['GET', 'POST'])
 def login():
     msg = ''
-    if request.method == 'POST' and 'username' in request.form and 'password' in request.form:
+    if request.method == 'POST' and 'username' in request.form and 'password' in request.form:  # Input submitted
         # Create variables for easy access
         username = request.form['username']
         password = request.form['password']
@@ -58,23 +59,25 @@ def login():
         if account:
             # Create session data, we can access this data in other routes
             session['loggedin'] = True
-            session['id'] = account[0] # Access corresponding member in tuple
+            session['id'] = account[0]  # Access corresponding member
             session['username'] = account[1]
             # Redirect to home page
             return redirect(url_for('userpage'))
         else:
-            # Account doesnt exist or username/password incorrect
+            # Account doesn't exist or username/password incorrect
             msg = 'Incorrect username/password!'
     return render_template('index.html', msg=msg)
+
 
 @app.route('/logout')
 def logout():
     # Remove session data, this will log the user out
-   session.pop('loggedin', None)
-   session.pop('id', None)
-   session.pop('username', None)
-   # Redirect to login page
-   return redirect(url_for('login'))
+    session.pop('loggedin', None)
+    session.pop('id', None)
+    session.pop('username', None)
+    # Redirect to login page
+    return redirect(url_for('login'))
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -101,7 +104,8 @@ def register():
             msg = 'Please fill out the form!'
         else:
             # Account doesn't exist, and the form data is valid, so insert the new account into the accounts table
-            cursor.execute('INSERT INTO Students VALUES (NULL, %s, %s, %s, 0, %s, %s, 5, 4)', (username, password, email, 'Test', 'Test'))
+            cursor.execute('INSERT INTO Students VALUES (NULL, %s, %s, %s, 0, %s, 5, 4)',
+                           (username, password, email, 'Test'))
             mysql.connection.commit()
             msg = 'You have successfully registered!'
     elif request.method == 'POST':
@@ -111,26 +115,11 @@ def register():
     return render_template('register.html', msg=msg)
 
 
-@app.route('/userpage')
-def userpage():
-    # Check if the user is logged in
-    if 'loggedin' in session:
-        # User is loggedin show them the home page
-        cursor = mysql.connection.cursor()
-        cursor.execute("SELECT * FROM Courses")
-        data = cursor.fetchall()
-        cursor.close()
-        #    return render_template('index.html', data=data)
-        return render_template('home.html', username=session['username'], data=data)
-    # User is not loggedin redirect to login page
-    return redirect(url_for('login'))
-
-# http://localhost:5000/pythinlogin/profile - this will be the profile page, only accessible for logged in users
 @app.route('/profile')
 def profile():
     # Check if the user is logged in
     if 'loggedin' in session:
-        # We need all the account info for the user so we can display it on the profile page
+        # We need all the account info for the user so that we can display it on the profile page
         cursor = mysql.connection.cursor()
         cursor.execute('SELECT * FROM Students WHERE id = %s', (session['id'],))
         account = cursor.fetchone()
@@ -139,19 +128,89 @@ def profile():
     # User is not logged in redirect to login page
     return redirect(url_for('login'))
 
-@app.route('/userpage/enroll')
-def enroll():
-    return redirect(url_for('profile'))
 
-@app.route('/userpage/withdraw')
-def withdraw():
-    return redirect(url_for('profile'))
+@app.route('/userpage')
+def userpage():
+    # Check if the user is logged in
+    if 'loggedin' in session:
+        cursor = mysql.connection.cursor()
+        # Show Available Courses
+        cursor.execute("SELECT * FROM Students WHERE id = %s", (session['id'],))
+        data = cursor.fetchone()
+        if data[4] == 0:  # Not Admin
+            cursor.execute(
+                "SELECT * FROM Courses C where not exists (SELECT * FROM Enrolled E where E.id = %s and C.cid = E.cid)",
+                (session['id'],))
+            data = cursor.fetchall()
+            cursor.close()
+            return render_template('available.html', username=session['username'], data=data)
+        else:
+            cursor.execute("SELECT * FROM Courses")
+            data = cursor.fetchall()
+            cursor.close()
+            return render_template('adminCourses.html', username=session['username'], data=data)
+    # User is not loggedin redirect to login page
+    return redirect(url_for('login'))
 
+
+@app.route('/userpage/enrolled')
+def enrolled():
+    # Check if the user is logged in
+    if 'loggedin' in session:
+        # User is loggedin show them the home page
+        cursor = mysql.connection.cursor()
+        cursor.execute("SELECT * FROM Courses C, Enrolled E WHERE E.id = %s and C.cid = E.cid", (session['id'],))
+        data = cursor.fetchall()
+        gpa = calculate_gpa(session['id'])
+        cursor.close()
+        #    return render_template('index.html', data=data)
+        return render_template('enrolled.html', username=session['username'], data=data, gpa=gpa)
+    # User is not loggedin redirect to login page
+    return redirect(url_for('login'))
+
+@app.route('/userpage/selectenrolled', methods=['POST'])
+def enrolled():
+    # Check if the user is logged in
+    if 'loggedin' in session:
+
+        return render_template('enrolled.html', username=session['username'], data=data, gpa=gpa)
+
+    return redirect(url_for('login'))
+
+
+@app.route('/enroll/<int:id>/<string:cid>')
+def enroll(id, cid):
+    cursor = mysql.connection.cursor()
+    cursor.execute("INSERT INTO Enrolled VALUES (%s, %s, NULL)", (id, cid,))
+    cursor.execute("UPDATE Courses SET enrolled = enrolled + 1 WHERE cid = %s", (cid,))
+    mysql.connection.commit()
+    cursor.close()
+    return redirect(url_for('enrolled'))
+
+
+@app.route('/withdraw/<int:id>/<string:cid>')
+def withdraw(id, cid):
+    cursor = mysql.connection.cursor()
+    cursor.execute("DELETE FROM Enrolled WHERE id = %s and cid = %s", (id, cid,))
+    mysql.connection.commit()
+    cursor.close()
+    return redirect(url_for('enrolled'))
+
+
+def calculate_gpa(id):
+    # Calculate GPA with SQl here
+    # To use previous gpa with total credits:
+    # multiply credits * gpa to get quality points
+    return 3.0
+
+
+
+# -------------------------------------------------------------------------------------
 # ORIGINAL INDEX PAGE!!!!
-#@app.route('/')
-#def index():
+# @app.route('/')
+# def index():
 
-    # Display a list of records from the database
+# Display a list of records from the database
 #    cursor = mysql.connection.cursor()
 #    cursor.execute("SELECT * FROM student")
 #    data = cursor.fetchall()
@@ -173,7 +232,6 @@ def add():
         mysql.connection.commit()
         cursor.close()
         return redirect(url_for('index'))
-
 
 
 # Route for deleting students
@@ -213,4 +271,3 @@ def update(id):
 
 if __name__ == '__main__':
     app.run(debug=True, host="localhost", port=9999)
-

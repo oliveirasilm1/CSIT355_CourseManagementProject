@@ -3,16 +3,14 @@
 {% block title %}Home{% endblock %}
 
 {% block content %}
-<h2>Home Page</h2>
-<h3>Student Records</h3>
+<h2>Enrolled</h2>
     <table border="1" class="student-table">
         <thead>
             <tr>
                 <th>CID</th>
                 <th>Name</th>
                 <th>Credits</th>
-                <th>Available</th>
-                <th>Total</th>
+                <th>Grade</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -22,14 +20,14 @@
                 <td>{{ record[0] }}</td>
                 <td>{{ record[1] }}</td>
                 <td>{{ record[2] }}</td>
-                <td>{{ record[5] - record[4] }}</td>
-                <td>{{ record[5] }}</td>
+                <td>{{ record[7]}}</td>
                 <td>
-                    <a href="{{ url_for('enroll', id=session['id']) }}">Enroll</a>
-                    <a href="{{ url_for('withdraw', id=session['id']) }}">Withdraw</a>
+                    <a href="{{ url_for('withdraw', id=session['id'], cid=record[0])}}">Withdraw</a>
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    <h3>GPA:</h3>
+    <p>{{ gpa }}</p>
 {% endblock %}
