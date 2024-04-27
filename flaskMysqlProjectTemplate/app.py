@@ -145,10 +145,10 @@ def userpage():
             cursor.close()
             return render_template('available.html', username=session['username'], data=data)
         else:
-            cursor.execute("SELECT * FROM Courses")
+            cursor.execute("SELECT * FROM Students")
             data = cursor.fetchall()
             cursor.close()
-            return render_template('adminCourses.html', username=session['username'], data=data)
+            return render_template('admin.html', username=session['username'], data=data)
     # User is not loggedin redirect to login page
     return redirect(url_for('login'))
 
@@ -168,15 +168,33 @@ def enrolled():
     # User is not loggedin redirect to login page
     return redirect(url_for('login'))
 
-@app.route('/userpage/selectenrolled', methods=['POST'])
-def enrolled():
+
+@app.route('/admin/selectenrolled', methods=['GET', 'POST'])
+def adminenrolled():
     # Check if the user is logged in
     if 'loggedin' in session:
-
-        return render_template('enrolled.html', username=session['username'], data=data, gpa=gpa)
+        if request.method == 'POST':
+            name = request.form['name']
+            age = request.form['age']
+            email = request.form['email']
+            return render_template('adminenrolled.html', username=session['username'])
+        return render_template('adminenrolled.html', username=session['username'])
 
     return redirect(url_for('login'))
 
+
+@app.route('/admin/courses', methods=['GET', 'POST'])
+def admincourses():
+    # Check if the user is logged in
+    if 'loggedin' in session:
+        if request.method == 'POST':
+            name = request.form['name']
+            age = request.form['age']
+            email = request.form['email']
+            return render_template('admincourses.html', username=session['username'])
+        return render_template('admincourses.html', username=session['username'])
+
+    return redirect(url_for('login'))
 
 @app.route('/enroll/<int:id>/<string:cid>')
 def enroll(id, cid):
@@ -198,11 +216,64 @@ def withdraw(id, cid):
 
 
 def calculate_gpa(id):
-    # Calculate GPA with SQl here
-    # To use previous gpa with total credits:
-    # multiply credits * gpa to get quality points
-    return 3.0
-
+    cursor = mysql.connection.cursor()
+    cursor.execute("""
+        WITH GradePoints AS (
+        SELECT
+        E.id AS student_id,
+        E.cid, 
+        CASE
+        WHEN grade >= 94 THEN 4.0
+        WHEN grade >= 90 THEN 3.7
+        WHEN grade >= 87 THEN 3.3
+         WHEN grade >= 84 THEN 3.0
+        WHEN grade >= 80 THEN 2.7
+        WHEN grade >= 77 THEN 2.3
+        WHEN grade >= 74 THEN 2.0
+        WHEN grade >= 70 THEN 1.7
+        WHEN grade >= 67 THEN 1.3
+        WHEN grade >= 64 THEN 1.0
+        WHEN grade >= 60 THEN 0.7
+        WHEN grade >= 0 THEN 0.0
+        ELSE NULL
+        END AS point,
+        C.credits
+        FROM
+        Enrolled E
+        JOIN Courses C ON E.cid = C.cid
+        ),
+        StudentQualityPoints AS (
+        SELECT
+        student_id,
+        SUM(point * credits) AS total_quality_points,
+        SUM(credits) AS total_credit_hours
+        FROM
+        GradePoints
+        GROUP BY
+        student_id
+        ),
+        StudentGPA AS (
+        SELECT
+        student_id,
+        total_quality_points,
+        total_credit_hours,
+        CASE
+            WHEN total_credit_hours > 0 THEN total_quality_points / total_credit_hours
+            ELSE NULL
+        END AS gpa
+        FROM
+        StudentQualityPoints)
+        SELECT
+        ROUND (SG.gpa, 2) AS gpa
+        FROM
+        Students S
+        LEFT JOIN StudentGPA SG ON S.id = SG.student_id
+        WHERE S.id = %s
+    """, (id,))
+    gpa = cursor.fetchone()
+    mysql.connection.commit()
+    cursor.close()
+    return gpa[0]
 
 
 # -------------------------------------------------------------------------------------
