@@ -11,7 +11,7 @@
 			<div>
 				<h1>Course Management</h1>
                 <a href="{{ url_for('admincourses') }}">Courses</a>
-                <a href="{{ url_for('adminenrolled') }}">Enrolled</a>
+                <a href="{{ url_for('adminenrolled', cid='all') }}">Enrolled</a>
                 <a href="{{ url_for('userpage') }}"></i>Students</a>
 				<a href="{{ url_for('profile') }}"><i class="fas fa-user-circle"></i>Profile</a>
 				<a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i>Logout</a>

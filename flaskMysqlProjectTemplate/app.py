@@ -31,11 +31,9 @@ def execute_initial_sql(mysql):
     except Exception as e:
         print(f"Error executing initial SQL script: {str(e)}")
 
-
 # you can comment out the following two lines if using docker compose
 with app.app_context():
     execute_initial_sql(mysql)
-
 
 # @app.before_first_request
 # def before_first_request():
@@ -68,7 +66,7 @@ def login():
             msg = 'Incorrect username/password!'
     return render_template('index.html', msg=msg)
 
-
+# Logout
 @app.route('/logout')
 def logout():
     # Remove session data, this will log the user out
@@ -78,7 +76,7 @@ def logout():
     # Redirect to login page
     return redirect(url_for('login'))
 
-
+# Register
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     # Output message if something goes wrong...
@@ -114,7 +112,7 @@ def register():
     # Show registration form with message (if any)
     return render_template('register.html', msg=msg)
 
-
+# User Information (Profile)
 @app.route('/profile')
 def profile():
     # Check if the user is logged in
@@ -128,7 +126,7 @@ def profile():
     # User is not logged in redirect to login page
     return redirect(url_for('login'))
 
-
+# Main Page (Admin: View Students Table; Student: View Available Courses Table)
 @app.route('/userpage')
 def userpage():
     # Check if the user is logged in
@@ -152,7 +150,7 @@ def userpage():
     # User is not loggedin redirect to login page
     return redirect(url_for('login'))
 
-
+# Enrolled Courses Table (for students only)
 @app.route('/userpage/enrolled')
 def enrolled():
     # Check if the user is logged in
@@ -168,36 +166,47 @@ def enrolled():
     # User is not loggedin redirect to login page
     return redirect(url_for('login'))
 
-
-@app.route('/admin/selectenrolled', methods=['GET', 'POST'])
-def adminenrolled():
+# Enrollment Page (for admin only)
+@app.route('/admin/selectenrolled/<string:cid>', methods=['GET', 'POST'])
+def adminenrolled(cid):
     # Check if the user is logged in
     if 'loggedin' in session:
-        if request.method == 'POST':
-            name = request.form['name']
-            age = request.form['age']
-            email = request.form['email']
-            return render_template('adminenrolled.html', username=session['username'])
-        return render_template('adminenrolled.html', username=session['username'])
-
+        cursor = mysql.connection.cursor()
+        if cid == 'all':
+            cursor.execute("SELECT * FROM Enrolled")
+            data = cursor.fetchall()
+        else:
+            cursor.execute("SELECT * FROM Enrolled E WHERE E.cid = %s", (cid,))
+            data = cursor.fetchall()
+        cursor.execute("SELECT cid FROM Courses")
+        courses = cursor.fetchall()
+        cursor.close()
+        return render_template('adminenrolled.html', data=data, courses=courses)
     return redirect(url_for('login'))
 
-
+# Courses Page (for admin only)
 @app.route('/admin/courses', methods=['GET', 'POST'])
 def admincourses():
-    # Check if the user is logged in
+    # Check if logged in
     if 'loggedin' in session:
-        if request.method == 'POST':
-            name = request.form['name']
-            age = request.form['age']
-            email = request.form['email']
-            return render_template('admincourses.html', username=session['username'])
-        return render_template('admincourses.html', username=session['username'])
-
+        cursor = mysql.connection.cursor()
+        cursor.execute("SELECT * FROM Courses")
+        data = cursor.fetchall()
+        return render_template('admincourses.html', username=session['username'], data=data)
     return redirect(url_for('login'))
 
+@app.route('/submit', methods=['POST'])
+def submit():
+    if request.method == 'POST':
+        cid = request.form.get('course_select')
+        return redirect(url_for('adminenrolled', cid=cid))
+
+# -----------------CHANGE TABLE QUERY FUNCTIONS--------------------------
+
+# Enroll Student Into Class (new tuple -- null grade)
 @app.route('/enroll/<int:id>/<string:cid>')
 def enroll(id, cid):
+    # ADD CODE TO CHECK THAT IF STUDENT THAT THEIR LOGGED IN SESSION ID IS THE INPUT ID
     cursor = mysql.connection.cursor()
     cursor.execute("INSERT INTO Enrolled VALUES (%s, %s, NULL)", (id, cid,))
     cursor.execute("UPDATE Courses SET enrolled = enrolled + 1 WHERE cid = %s", (cid,))
@@ -205,7 +214,7 @@ def enroll(id, cid):
     cursor.close()
     return redirect(url_for('enrolled'))
 
-
+# Withdraw Student Frrom Class (delete tuple)
 @app.route('/withdraw/<int:id>/<string:cid>')
 def withdraw(id, cid):
     cursor = mysql.connection.cursor()
@@ -214,62 +223,62 @@ def withdraw(id, cid):
     cursor.close()
     return redirect(url_for('enrolled'))
 
-
+# Calculate and return GPA for enrolled courses for student with id = id
 def calculate_gpa(id):
     cursor = mysql.connection.cursor()
-    cursor.execute("""
-        WITH GradePoints AS (
-        SELECT
-        E.id AS student_id,
-        E.cid, 
-        CASE
-        WHEN grade >= 94 THEN 4.0
-        WHEN grade >= 90 THEN 3.7
-        WHEN grade >= 87 THEN 3.3
-         WHEN grade >= 84 THEN 3.0
-        WHEN grade >= 80 THEN 2.7
-        WHEN grade >= 77 THEN 2.3
-        WHEN grade >= 74 THEN 2.0
-        WHEN grade >= 70 THEN 1.7
-        WHEN grade >= 67 THEN 1.3
-        WHEN grade >= 64 THEN 1.0
-        WHEN grade >= 60 THEN 0.7
-        WHEN grade >= 0 THEN 0.0
-        ELSE NULL
-        END AS point,
-        C.credits
-        FROM
-        Enrolled E
-        JOIN Courses C ON E.cid = C.cid
-        ),
-        StudentQualityPoints AS (
-        SELECT
-        student_id,
-        SUM(point * credits) AS total_quality_points,
-        SUM(credits) AS total_credit_hours
-        FROM
-        GradePoints
-        GROUP BY
-        student_id
-        ),
-        StudentGPA AS (
-        SELECT
-        student_id,
-        total_quality_points,
-        total_credit_hours,
-        CASE
-            WHEN total_credit_hours > 0 THEN total_quality_points / total_credit_hours
-            ELSE NULL
-        END AS gpa
-        FROM
-        StudentQualityPoints)
-        SELECT
-        ROUND (SG.gpa, 2) AS gpa
-        FROM
-        Students S
-        LEFT JOIN StudentGPA SG ON S.id = SG.student_id
-        WHERE S.id = %s
-    """, (id,))
+    cursor.execute("\n"
+                   "        WITH GradePoints AS (\n"
+                   "        SELECT\n"
+                   "        E.id AS student_id,\n"
+                   "        E.cid, \n"
+                   "        CASE\n"
+                   "        WHEN grade >= 94 THEN 4.0\n"
+                   "        WHEN grade >= 90 THEN 3.7\n"
+                   "        WHEN grade >= 87 THEN 3.3\n"
+                   "         WHEN grade >= 84 THEN 3.0\n"
+                   "        WHEN grade >= 80 THEN 2.7\n"
+                   "        WHEN grade >= 77 THEN 2.3\n"
+                   "        WHEN grade >= 74 THEN 2.0\n"
+                   "        WHEN grade >= 70 THEN 1.7\n"
+                   "        WHEN grade >= 67 THEN 1.3\n"
+                   "        WHEN grade >= 64 THEN 1.0\n"
+                   "        WHEN grade >= 60 THEN 0.7\n"
+                   "        WHEN grade >= 0 THEN 0.0\n"
+                   "        ELSE NULL\n"
+                   "        END AS point,\n"
+                   "        C.credits\n"
+                   "        FROM\n"
+                   "        Enrolled E\n"
+                   "        JOIN Courses C ON E.cid = C.cid\n"
+                   "        ),\n"
+                   "        StudentQualityPoints AS (\n"
+                   "        SELECT\n"
+                   "        student_id,\n"
+                   "        SUM(point * credits) AS total_quality_points,\n"
+                   "        SUM(credits) AS total_credit_hours\n"
+                   "        FROM\n"
+                   "        GradePoints\n"
+                   "        GROUP BY\n"
+                   "        student_id\n"
+                   "        ),\n"
+                   "        StudentGPA AS (\n"
+                   "        SELECT\n"
+                   "        student_id,\n"
+                   "        total_quality_points,\n"
+                   "        total_credit_hours,\n"
+                   "        CASE\n"
+                   "            WHEN total_credit_hours > 0 THEN total_quality_points / total_credit_hours\n"
+                   "            ELSE NULL\n"
+                   "        END AS gpa\n"
+                   "        FROM\n"
+                   "        StudentQualityPoints)\n"
+                   "        SELECT\n"
+                   "        ROUND (SG.gpa, 2) AS gpa\n"
+                   "        FROM\n"
+                   "        Students S\n"
+                   "        LEFT JOIN StudentGPA SG ON S.id = SG.student_id\n"
+                   "        WHERE S.id = %s\n"
+                   "    ", (id,))
     gpa = cursor.fetchone()
     mysql.connection.commit()
     cursor.close()
@@ -303,6 +312,13 @@ def add():
         mysql.connection.commit()
         cursor.close()
         return redirect(url_for('index'))
+
+@app.route('/addenroll', methods=['POST'])
+def addenroll():
+    if request.method == 'POST':
+        id = request.form['id']
+        cid = request.form['cid']
+        return redirect(url_for('enroll', id=id, cid=cid))
 
 
 # Route for deleting students

@@ -3,14 +3,24 @@
 {% block title %}Home{% endblock %}
 
 {% block content %}
-<h1>Student Records</h1>
+<h2>Enrollment Records</h2>
+    <br>
+    <form method="POST" action="/submit" class="center">
+    <label for="course_select">Select Course:</label>
+    <select id="course_select" name="course_select">
+        <option value="all">All Courses</option>
+        {% for course in courses %}
+            <option value="{{ course[0] }}">{{ course[0] }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit">Submit</button>
+</form>
     <table border="1" class="student-table">
         <thead>
             <tr>
                 <th>ID</th>
-                <th>Name</th>
-                <th>Age</th>
-                <th>Email</th>
+                <th>CID</th>
+                <th>Grade</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -20,7 +30,6 @@
                 <td>{{ record[0] }}</td>
                 <td>{{ record[1] }}</td>
                 <td>{{ record[2] }}</td>
-                <td>{{ record[3] }}</td>
                 <td>
                     <a href="{{ url_for('update', id=record[0]) }}">Update</a>
                     <a href="{{ url_for('delete', id=record[0]) }}">Delete</a>
@@ -30,16 +39,17 @@
         </tbody>
     </table>
     <br>
+    <div class="center">
 <div class="form-container">
     <h2>Add Enrollment</h2>
-    <form method="POST" action="/add">
-        <label for="name">Name:</label>
-        <input type="text" name="name" required><br>
-        <label for="age">Age:</label>
-        <input type="text" name="age" required><br>
-        <label for="email">Email:</label>
-        <input type="email" name="email" required><br>
+    <form method="POST" action="/addenroll">
+        <label for="id">Student ID:</label>
+        <input type="text" name="id" required><br>
+        <label for="cid">Course ID:</label>
+        <input type="text" name="cid" required><br>
         <button type="submit" value="Add">Add</button><br>
     </form>
 </div>
+    </div>
+
 {% endblock %}
